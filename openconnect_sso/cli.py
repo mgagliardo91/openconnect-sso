@@ -86,6 +86,18 @@ def create_argparser():
     )
 
     parser.add_argument(
+        "--override-script",
+        help="Path to a javascript script to be used for authenticating with the SSO flow",
+        default="",
+    )
+
+    parser.add_argument(
+        "--authenticate-timeout",
+        help="Time-out in seconds to wait during the SSO login flow",
+        default="",
+    )
+
+    parser.add_argument(
         "-V", "--version", action="version", version=f"%(prog)s {__version__}"
     )
 

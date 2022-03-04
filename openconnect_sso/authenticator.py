@@ -13,13 +13,13 @@ logger = structlog.get_logger()
 
 
 class Authenticator:
-    def __init__(self, host, proxy=None, credentials=None):
+    def __init__(self, cfg, host, proxy=None):
         self.host = host
+        self.cfg = cfg
         self.proxy = proxy
-        self.credentials = credentials
         self.session = create_http_session(proxy)
 
-    async def authenticate(self, display_mode):
+    async def authenticate(self, override_script, display_mode):
         self._detect_authentication_target_url()
 
         response = self._start_authentication()
@@ -40,7 +40,9 @@ class Authenticator:
 
         auth_request_response = response
 
-        sso_token = self._authenticate_in_browser(auth_request_response, display_mode)
+        sso_token = self._authenticate_in_browser(
+            auth_request_response, override_script, display_mode
+        )
 
         response = self._complete_authentication(auth_request_response, sso_token)
         if not isinstance(response, AuthCompleteResponse):
@@ -67,9 +69,11 @@ class Authenticator:
         logger.debug("Auth init response received", content=response.content)
         return parse_response(response)
 
-    def _authenticate_in_browser(self, auth_request_response, display_mode):
+    def _authenticate_in_browser(
+        self, auth_request_response, override_script, display_mode
+    ):
         return authenticate_in_browser(
-            self.proxy, auth_request_response, self.credentials, display_mode
+            self.cfg, self.proxy, auth_request_response, override_script, display_mode
         )
 
     def _complete_authentication(self, auth_request_response, sso_token):

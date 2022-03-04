@@ -130,6 +130,8 @@ class Config(ConfigNode):
         },
     )
     on_disconnect = attr.ib(converter=str, default="")
+    override_script = attr.ib(converter=str, default="")
+    authenticate_timeout = attr.ib(converter=int, default=10)
 
 
 class DisplayMode(enum.Enum):

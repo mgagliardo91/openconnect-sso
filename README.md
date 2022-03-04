@@ -127,6 +127,58 @@ Configuration is saved in `$XDG_CONFIG_HOME/openconnect-sso/config.toml`. On
 typical Linux installations it is located under
 `$HOME/.config/openconnect-sso/config.toml`
 
+Example configuration (generated on first run):
+
+```toml
+on_disconnect = ""
+override_script = ""
+authenticate_timeout = 10
+
+[default_profile]
+address = ""
+user_group = ""
+name = ""
+
+[credentials]
+username = ""
+
+[auto_fill_rules]
+[[auto_fill_rules."https://*"]]
+selector = "div[id=passwordError]"
+action = "stop"
+
+[[auto_fill_rules."https://*"]]
+selector = "input[type=email]"
+fill = "username"
+
+[[auto_fill_rules."https://*"]]
+selector = "input[type=password]"
+fill = "password"
+
+[[auto_fill_rules."https://*"]]
+selector = "input[type=submit]"
+action = "click"
+```
+
+## Custom SSO script
+
+openconnect-sso uses [Selenium](https://selenium-python.readthedocs.io/) to interface with the browser in order to automate entering the credentials required to achieve an access token for connecting with `openconnect`.
+
+If the `auto_fill_rules` in the _config.toml_ file do not meet the needs of your usage, the path to a custom javascript userscript can be passed via the argument `--override-script` or in the configuration by specifying a value for `override_script`.
+
+This file is expanded with environment variables including `USERNAME` and `PASSWORD` to enable the same script to be applied across unique logins.
+
+An example of the a script is located at [example/defaultRules.js](./example/defaultRules.js). This example is the same script that is executed with the default `auto_fill_rules`.
+
+## Headless-Mode
+
+Headless usage can be specified using the argument `--browser-display-mode=hidden`. In this mode, the browser will not be displayed while the script interacts with the SSO provider. This mode can also be used to enable support for containerized environments
+
+### Debugging Headless Execution
+
+When running in headless mode, any failures in attempting to authenticate in the browser will attempt to be captured in a screenshot which will be saved to the current working directory.
+
+
 ## Development
 
 `openconnect-sso` is developed using [Nix](https://nixos.org/nix/). Refer to the
