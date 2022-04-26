@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import enum
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any, TypeVar
 from urllib.parse import urlparse, urlunparse
 
-import attr
 import keyring
 import keyring.errors
 import structlog
@@ -12,9 +15,10 @@ import xdg.BaseDirectory
 logger = structlog.get_logger()
 
 APP_NAME = "openconnect-sso"
+T = TypeVar("T")
 
 
-def load():
+def load() -> Config:
     path = xdg.BaseDirectory.load_first_config(APP_NAME)
     if not path:
         return Config()
@@ -33,7 +37,7 @@ def load():
             return Config()
 
 
-def save(config):
+def save(config: Config) -> None:
     path = xdg.BaseDirectory.save_config_path(APP_NAME)
     config_path = Path(path) / "config.toml"
     try:
@@ -46,26 +50,25 @@ def save(config):
         )
 
 
-@attr.s
 class ConfigNode:
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls: type[T], d: dict[str, Any] | None) -> T | None:
         if d is None:
             return None
         return cls(**d)
 
-    def as_dict(self):
-        return attr.asdict(self)
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
-@attr.s
+@dataclass
 class HostProfile(ConfigNode):
-    address = attr.ib(converter=str)
-    user_group = attr.ib(converter=str)
-    name = attr.ib(converter=str)  # authgroup
+    address: str
+    user_group: str
+    name: str
 
     @property
-    def vpn_url(self):
+    def vpn_url(self) -> str:
         parts = urlparse(self.address)
         group = self.user_group or parts.path
         if parts.path == self.address and not self.user_group:
@@ -75,31 +78,31 @@ class HostProfile(ConfigNode):
         )
 
 
-@attr.s
+@dataclass
 class AutoFillRule(ConfigNode):
-    selector = attr.ib()
-    fill = attr.ib(default=None)
-    action = attr.ib(default=None)
+    selector: str
+    fill: str | None = None
+    action: str | None = None
 
 
-def get_default_auto_fill_rules():
+def get_default_auto_fill_rules() -> dict[str, list[AutoFillRule]]:
     return {
         "https://*": [
-            AutoFillRule(selector="div[id=passwordError]", action="stop").as_dict(),
-            AutoFillRule(selector="input[type=email]", fill="username").as_dict(),
-            AutoFillRule(selector="input[type=password]", fill="password").as_dict(),
-            AutoFillRule(selector="input[type=submit]", action="click").as_dict(),
+            AutoFillRule(selector="div[id=passwordError]", action="stop"),
+            AutoFillRule(selector="input[type=email]", fill="username"),
+            AutoFillRule(selector="input[type=password]", fill="password"),
+            AutoFillRule(selector="input[type=submit]", action="click"),
         ]
     }
 
 
-@attr.s
+@dataclass
 class Credentials(ConfigNode):
-    username = attr.ib()
-    _password = attr.ib(default=None)
+    username: str
+    _password: str | None = None
 
     @property
-    def password(self):
+    def password(self) -> str | None:
         if self._password:
             return self._password
 
@@ -110,7 +113,7 @@ class Credentials(ConfigNode):
             return ""
 
     @password.setter
-    def password(self, value):
+    def password(self, value: str) -> None:
         self._password = value
 
         try:
@@ -119,17 +122,25 @@ class Credentials(ConfigNode):
             logger.info("Cannot save password to keyring.")
 
 
-@attr.s
+@dataclass
 class Config(ConfigNode):
-    default_profile = attr.ib(default=None, converter=HostProfile.from_dict)
-    credentials = attr.ib(default=None, converter=Credentials.from_dict)
-    auto_fill_rules = attr.ib(
-        factory=get_default_auto_fill_rules,
-        converter=lambda rules: {
-            n: [AutoFillRule.from_dict(r) for r in rule] for n, rule in rules.items()
-        },
+    default_profile: HostProfile | None = None
+    credentials: Credentials | None = None
+    auto_fill_rules: dict[str, list[AutoFillRule]] = field(
+        default_factory=get_default_auto_fill_rules
     )
-    on_disconnect = attr.ib(converter=str, default="")
+    on_disconnect: str = field(default_factory=str)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Config:  # type: ignore
+        return Config(
+            default_profile=HostProfile.from_dict(data.get("default_profile")),
+            credentials=Credentials.from_dict(data.get("credentials")),
+            auto_fill_rules={
+                n: [AutoFillRule(**r) for r in rule]
+                for n, rule in data["auto_fill_rules"].items()
+            },
+        )
 
 
 class DisplayMode(enum.Enum):

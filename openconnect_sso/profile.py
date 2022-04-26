@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 import structlog
@@ -10,7 +12,7 @@ logger = structlog.get_logger()
 ns = {"enc": "http://schemas.xmlsoap.org/encoding/"}
 
 
-def _get_profiles_from_one_file(path):
+def _get_profiles_from_one_file(path: Path) -> list[HostProfile]:
     logger.info("Loading profiles from file", path=path.name)
 
     with path.open() as f:
@@ -34,11 +36,11 @@ def _get_profiles_from_one_file(path):
     return profiles
 
 
-def get_profiles(path: Path):
+def get_profiles(path: Path) -> list[HostProfile]:
     if path.is_file():
         profile_files = [path]
     elif path.is_dir():
-        profile_files = path.glob("*.xml")
+        profile_files = list(path.glob("*.xml"))
     else:
         raise ValueError("No profile file found", path.name)
 

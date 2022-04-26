@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 import argparse
 import enum
 import logging
 import os
 import sys
+from typing import Iterable, Sequence
 
-import openconnect_sso
-from openconnect_sso import app, config, __version__
+from openconnect_sso import __description__, __version__, app, config
 
 
-def create_argparser():
+def create_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="openconnect-sso", description=openconnect_sso.__description__
+        prog="openconnect-sso", description=__description__
     )
 
     server_settings = parser.add_argument_group("Server connection")
@@ -113,7 +115,13 @@ def create_argparser():
 
 
 class StoreOpenConnectArgs(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(  # type: ignore
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: list[str],
+        option_string: str | None = None,
+    ) -> None:
         if "--" in values:
             values.remove("--")
         setattr(namespace, self.dest, values)
@@ -125,24 +133,24 @@ class LogLevel(enum.IntEnum):
     INFO = logging.INFO
     DEBUG = logging.DEBUG
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
     @classmethod
-    def parse(cls, name):
+    def parse(cls, name: str) -> LogLevel:
         try:
             level = cls.__members__[name.upper()]
         except KeyError:
             print(f"unknown loglevel '{name}', setting to INFO", file=sys.stderr)
-            level = logging.INFO
+            level = LogLevel.INFO
         return level
 
     @classmethod
-    def choices(cls):
+    def choices(cls) -> Iterable[LogLevel]:
         return cls.__members__.values()
 
 
-def main():
+def main() -> int:
     parser = create_argparser()
     args = parser.parse_args()
 

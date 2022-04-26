@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 
 from openconnect_sso.config import HostProfile
@@ -15,5 +17,5 @@ from openconnect_sso.config import HostProfile
         ("https://hostname:8443/group", "", "https://hostname:8443/group"),
     ),
 )
-def test_vpn_url(server, group, expected_url):
+def test_vpn_url(server: str, group: str, expected_url: str) -> None:
     assert HostProfile(server, group, "name").vpn_url == expected_url

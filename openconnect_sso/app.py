@@ -1,36 +1,43 @@
+from __future__ import annotations
+
 import asyncio
 import getpass
-import sys
 import json
 import logging
 import os
 import shlex
 import signal
 import subprocess
+import sys
+from argparse import Namespace
 from pathlib import Path
+from typing import Any, Coroutine
 
 import structlog
 from prompt_toolkit import HTML
 from prompt_toolkit.shortcuts import radiolist_dialog
+from requests.exceptions import HTTPError
 
 from openconnect_sso import config
-from openconnect_sso.authenticator import Authenticator, AuthResponseError
-from openconnect_sso.config import Credentials
+from openconnect_sso.authenticator import (
+    AuthCompleteResponse,
+    Authenticator,
+    AuthResponseError,
+)
+from openconnect_sso.config import Config, Credentials, DisplayMode, HostProfile
 from openconnect_sso.profile import get_profiles
-
-from requests.exceptions import HTTPError
 
 logger = structlog.get_logger()
 
 
-def run(args):
+def run(args: Namespace) -> int:
     configure_logger(logging.getLogger(), args.log_level)
 
     cfg = config.load()
 
     try:
         if os.name == "nt":
-            asyncio.set_event_loop(asyncio.ProactorEventLoop())
+            asyncio.set_event_loop(asyncio.ProactorEventLoop())  # type: ignore
         auth_response, selected_profile = asyncio.get_event_loop().run_until_complete(
             _run(args, cfg)
         )
@@ -40,7 +47,7 @@ def run(args):
     except ValueError as e:
         msg, retval = e.args
         logger.error(msg)
-        return retval
+        return retval  # type: ignore
     except AuthResponseError as exc:
         logger.error(
             f'Required attributes not found in response ("{exc}", does this endpoint do SSO?), exiting'
@@ -78,7 +85,7 @@ def run(args):
         handle_disconnect(cfg.on_disconnect)
 
 
-def configure_logger(logger, level):
+def configure_logger(logger: logging.Logger, level: logging._Level) -> None:
     structlog.configure(
         processors=[
             structlog.stdlib.add_log_level,
@@ -99,7 +106,9 @@ def configure_logger(logger, level):
     logger.setLevel(level)
 
 
-async def _run(args, cfg):
+async def _run(
+    args: Namespace, cfg: Config
+) -> tuple[AuthCompleteResponse, HostProfile]:
     credentials = None
     if cfg.credentials:
         credentials = cfg.credentials
@@ -122,7 +131,7 @@ async def _run(args, cfg):
         if not profiles:
             raise ValueError("No profile found", 17)
 
-        selected_profile = await select_profile(profiles)
+        selected_profile = await select_profile(profiles)  # type: ignore
         if not selected_profile:
             raise ValueError("No profile selected", 18)
     elif args.server:
@@ -148,14 +157,14 @@ async def _run(args, cfg):
     return auth_response, selected_profile
 
 
-async def select_profile(profile_list):
-    selection = await radiolist_dialog(
+async def select_profile(profile_list: list[HostProfile]) -> HostProfile | None:
+    selection: HostProfile | None = await radiolist_dialog(
         title="Select AnyConnect profile",
         text=HTML(
             "The following AnyConnect profiles are detected.\n"
             "The selection will be <b>saved</b> and not asked again unless the <pre>--profile-selector</pre> command line option is used"
         ),
-        values=[(p, p.name) for i, p in enumerate(profile_list)],
+        values=[(p, p.name) for i, p in enumerate(profile_list)],  # type: ignore
     ).run_async()
     # Somehow prompt_toolkit sets up a bogus signal handler upon exit
     # TODO: Report this issue upstream
@@ -167,12 +176,19 @@ async def select_profile(profile_list):
     return selection
 
 
-def authenticate_to(host, proxy, credentials, display_mode):
+def authenticate_to(
+    host: HostProfile,
+    proxy: str,
+    credentials: Credentials | None,
+    display_mode: DisplayMode,
+) -> Coroutine[Any, Any, AuthCompleteResponse]:
     logger.info("Authenticating to VPN endpoint", name=host.name, address=host.address)
     return Authenticator(host, proxy, credentials).authenticate(display_mode)
 
 
-def run_openconnect(auth_info, host, proxy, args):
+def run_openconnect(
+    auth_info: AuthCompleteResponse, host: HostProfile, proxy: str, args: list[str]
+) -> int:
     command_line = [
         "sudo",
         "openconnect",
@@ -190,7 +206,8 @@ def run_openconnect(auth_info, host, proxy, args):
     return subprocess.run(command_line, input=session_token).returncode
 
 
-def handle_disconnect(command):
+def handle_disconnect(command: str) -> int | None:
     if command:
         logger.info("Running command on disconnect", command_line=command)
         return subprocess.run(command, timeout=5, shell=True).returncode
+    return None
