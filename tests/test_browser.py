@@ -1,14 +1,17 @@
-import attr
+from __future__ import annotations
 
-from openconnect_sso.browser import Browser, DisplayMode
+from pytest_httpserver import HTTPServer
+
+from openconnect_sso.browser import Browser
+from openconnect_sso.config import Credentials, DisplayMode
 
 
-def test_browser_context_manager_should_work_in_empty_context_manager():
+def test_browser_context_manager_should_work_in_empty_context_manager() -> None:
     with Browser() as _:
         pass
 
 
-def test_browser_shown_cookies_accessible(httpserver):
+def test_browser_shown_cookies_accessible(httpserver: HTTPServer) -> None:
     with Browser(display_mode=DisplayMode.SHOWN) as browser:
         httpserver.expect_request("/authenticate").respond_with_data(
             "<html><body>Hello</body></html>",
@@ -20,7 +23,7 @@ def test_browser_shown_cookies_accessible(httpserver):
         assert value == "cookie-value"
 
 
-def test_browser_hidden_cookies_accessible(httpserver):
+def test_browser_hidden_cookies_accessible(httpserver: HTTPServer) -> None:
     with Browser(display_mode=DisplayMode.HIDDEN) as browser:
         httpserver.expect_request("/authenticate").respond_with_data(
             "<html><body>Hello</body></html>",
@@ -30,9 +33,3 @@ def test_browser_hidden_cookies_accessible(httpserver):
         cred = Credentials("username", "password")
         value = browser.authenticate_at(auth_url, cred, "cookie-name")
         assert value == "cookie-value"
-
-
-@attr.s
-class Credentials:
-    username = attr.ib()
-    password = attr.ib()

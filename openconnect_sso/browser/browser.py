@@ -1,30 +1,37 @@
+from __future__ import annotations
+
 import json
 import os
-import structlog
 from logging import CRITICAL
-
+from types import TracebackType
+from typing import Any
 from urllib.parse import urlparse
+
+import structlog
 from selenium import webdriver
 from selenium.webdriver import DesiredCapabilities
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.proxy import Proxy, ProxyType
+from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.utils import ChromeType
-from selenium.webdriver.common.proxy import Proxy, ProxyType
-from ..config import DisplayMode
 
 from openconnect_sso import config
+
+from ..config import AutoFillRule, Credentials, DisplayMode
 
 logger = structlog.get_logger()
 
 
 class Browser:
-    def __init__(self, proxy=None, display_mode=DisplayMode.SHOWN):
+    def __init__(
+        self, proxy: str | None = None, display_mode: DisplayMode = DisplayMode.SHOWN
+    ) -> None:
         self.cfg = config.load()
         self.proxy = proxy
         self.display_mode = display_mode
 
-    def __enter__(self):
+    def __enter__(self) -> Browser:
         chrome_options = Options()
         capabilities = DesiredCapabilities.CHROME
         if self.display_mode == DisplayMode.HIDDEN:
@@ -63,7 +70,9 @@ class Browser:
         )
         return self
 
-    def authenticate_at(self, url, credentials, expected_cookie_name):
+    def authenticate_at(
+        self, url: str, credentials: Credentials | None, expected_cookie_name: str
+    ) -> Any:
         self.driver.get(url)
         if credentials:
             for url_pattern, rules in self.cfg.auto_fill_rules.items():
@@ -78,22 +87,30 @@ function autoFill() {{
 }}
 autoFill();
 """
-        self.driver.execute_script(script)
+        self.driver.execute_script(script)  # type: ignore
         WebDriverWait(self.driver, 10).until(
             lambda driver: has_cookie(driver.get_cookies(), expected_cookie_name)
         )
-        return get_cookie(self.driver.get_cookies(), expected_cookie_name)
+        return get_cookie(
+            self.driver.get_cookies(),  # type: ignore
+            expected_cookie_name,
+        )
 
-    def __exit__(self, exc_type, exc_value, t):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool:
         self.driver.close()
         return True
 
 
-def has_cookie(cookies, cookie_name):
+def has_cookie(cookies: list[dict[str, Any]], cookie_name: str) -> bool:
     return get_cookie(cookies, cookie_name) is not None
 
 
-def get_cookie(cookies, cookie_name):
+def get_cookie(cookies: list[dict[str, Any]], cookie_name: str) -> Any:
     for c in cookies:
         if c["name"] == cookie_name:
             return c["value"]
@@ -101,7 +118,7 @@ def get_cookie(cookies, cookie_name):
     return None
 
 
-def get_selectors(rules, credentials):
+def get_selectors(rules: list[AutoFillRule], credentials: Credentials) -> str:
     statements = []
     for rule in rules:
         selector = json.dumps(rule.selector)

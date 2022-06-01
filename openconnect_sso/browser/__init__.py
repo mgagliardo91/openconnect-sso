@@ -1,3 +1,6 @@
-from .browser import Browser, DisplayMode
+from __future__ import annotations
 
-__all__ = [Browser, DisplayMode]
+from ..config import DisplayMode
+from .browser import Browser
+
+__all__ = ["Browser", "DisplayMode"]

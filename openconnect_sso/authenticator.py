@@ -1,25 +1,38 @@
-import attr
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
 import requests
 import structlog
 from lxml import etree, objectify
 
+from openconnect_sso.config import HostProfile
 from openconnect_sso.saml_authenticator import authenticate_in_browser
 
+if TYPE_CHECKING:
+    from openconnect_sso.config import Credentials, DisplayMode
+
 # See https://stackoverflow.com/a/41041028
-requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS += ":HIGH:!DH:!aNULL"
+requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS += ":HIGH:!DH:!aNULL"  # type: ignore
 
 
 logger = structlog.get_logger()
 
 
 class Authenticator:
-    def __init__(self, host, proxy=None, credentials=None):
+    def __init__(
+        self,
+        host: HostProfile,
+        proxy: str | None = None,
+        credentials: Credentials | None = None,
+    ) -> None:
         self.host = host
         self.proxy = proxy
         self.credentials = credentials
         self.session = create_http_session(proxy)
 
-    async def authenticate(self, display_mode):
+    async def authenticate(self, display_mode: DisplayMode) -> AuthCompleteResponse:
         self._detect_authentication_target_url()
 
         response = self._start_authentication()
@@ -52,7 +65,7 @@ class Authenticator:
 
         return response
 
-    def _detect_authentication_target_url(self):
+    def _detect_authentication_target_url(self) -> None:
         # Follow possible redirects in a GET request
         # Authentication will occcur using a POST request on the final URL
         response = requests.get(self.host.vpn_url)
@@ -60,19 +73,25 @@ class Authenticator:
         self.host.address = response.url
         logger.debug("Auth target url", url=self.host.vpn_url)
 
-    def _start_authentication(self):
+    def _start_authentication(
+        self,
+    ) -> AuthRequestResponse | AuthCompleteResponse | None:
         request = _create_auth_init_request(self.host, self.host.vpn_url)
         logger.debug("Sending auth init request", content=request)
         response = self.session.post(self.host.vpn_url, request)
         logger.debug("Auth init response received", content=response.content)
         return parse_response(response)
 
-    def _authenticate_in_browser(self, auth_request_response, display_mode):
+    def _authenticate_in_browser(
+        self, auth_request_response: AuthRequestResponse, display_mode: DisplayMode
+    ) -> Any:
         return authenticate_in_browser(
             self.proxy, auth_request_response, self.credentials, display_mode
         )
 
-    def _complete_authentication(self, auth_request_response, sso_token):
+    def _complete_authentication(
+        self, auth_request_response: AuthRequestResponse, sso_token: str
+    ) -> AuthRequestResponse | AuthCompleteResponse | None:
         request = _create_auth_finish_request(
             self.host, auth_request_response, sso_token
         )
@@ -90,9 +109,9 @@ class AuthResponseError(AuthenticationError):
     pass
 
 
-def create_http_session(proxy):
+def create_http_session(proxy: str | None) -> requests.Session:
     session = requests.Session()
-    session.proxies = {"http": proxy, "https": proxy}
+    session.proxies = {"http": proxy, "https": proxy}  # type: ignore
     session.headers.update(
         {
             "User-Agent": "AnyConnect Linux_64 4.7.00136",
@@ -111,7 +130,7 @@ def create_http_session(proxy):
 E = objectify.ElementMaker(annotate=False)
 
 
-def _create_auth_init_request(host, url):
+def _create_auth_init_request(host: HostProfile, url: str) -> Any:
     ConfigAuth = getattr(E, "config-auth")
     Version = E.version
     DeviceId = getattr(E, "device-id")
@@ -133,7 +152,9 @@ def _create_auth_init_request(host, url):
     )
 
 
-def parse_response(resp):
+def parse_response(
+    resp: requests.Response,
+) -> AuthRequestResponse | AuthCompleteResponse | None:
     resp.raise_for_status()
     xml = objectify.fromstring(resp.content)
     t = xml.get("type")
@@ -141,9 +162,12 @@ def parse_response(resp):
         return parse_auth_request_response(xml)
     elif t == "complete":
         return parse_auth_complete_response(xml)
+    return None
 
 
-def parse_auth_request_response(xml):
+def parse_auth_request_response(
+    xml: objectify.ObjectifiedElement,
+) -> AuthRequestResponse:
     assert xml.auth.get("id") == "main"
 
     try:
@@ -169,19 +193,21 @@ def parse_auth_request_response(xml):
     return resp
 
 
-@attr.s
+@dataclass
 class AuthRequestResponse:
-    auth_id = attr.ib(converter=str)
-    auth_title = attr.ib(converter=str)
-    auth_message = attr.ib(converter=str)
-    auth_error = attr.ib(converter=str)
-    login_url = attr.ib(converter=str)
-    login_final_url = attr.ib(converter=str)
-    token_cookie_name = attr.ib(converter=str)
-    opaque = attr.ib()
+    auth_id: str
+    auth_title: str
+    auth_message: str
+    auth_error: str
+    login_url: str
+    login_final_url: str
+    token_cookie_name: str
+    opaque: Any
 
 
-def parse_auth_complete_response(xml):
+def parse_auth_complete_response(
+    xml: objectify.ObjectifiedElement,
+) -> AuthCompleteResponse:
     assert xml.auth.get("id") == "success"
     resp = AuthCompleteResponse(
         auth_id=xml.auth.get("id"),
@@ -193,15 +219,17 @@ def parse_auth_complete_response(xml):
     return resp
 
 
-@attr.s
+@dataclass
 class AuthCompleteResponse:
-    auth_id = attr.ib(converter=str)
-    auth_message = attr.ib(converter=str)
-    session_token = attr.ib(converter=str)
-    server_cert_hash = attr.ib(converter=str)
+    auth_id: str
+    auth_message: str
+    session_token: str
+    server_cert_hash: str
 
 
-def _create_auth_finish_request(host, auth_info, sso_token):
+def _create_auth_finish_request(
+    host: HostProfile, auth_info: AuthRequestResponse, sso_token: str
+) -> str:
     ConfigAuth = getattr(E, "config-auth")
     Version = E.version
     DeviceId = getattr(E, "device-id")
@@ -219,6 +247,6 @@ def _create_auth_finish_request(host, auth_info, sso_token):
         auth_info.opaque,
         Auth(SsoToken(sso_token)),
     )
-    return etree.tostring(
+    return etree.tostring(  # type: ignore
         root, pretty_print=True, xml_declaration=True, encoding="UTF-8"
     )
